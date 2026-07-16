@@ -1,0 +1,119 @@
+/* 样式表：控制网页长什么样（颜色、字号、间距）。
+ * 想改文字内容请去 content.js，这个文件只管外观。 */
+
+/* —— 浅色配色（默认）—— */
+:root {
+  --bg: #ffffff;
+  --text: #24292f;
+  --muted: #6b7280;
+  --link: #1a5fb4;
+  --link-hover: #0b3d91;
+}
+
+/* —— 深色配色（跟随系统深色模式自动切换）—— */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d;
+    --text: #e4e6eb;
+    --muted: #9aa0a6;
+    --link: #6ea8fe;
+    --link-hover: #a3c2ff;
+  }
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto,
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-size: 16px;
+  line-height: 1.75;
+}
+
+/* 窄栏居中 + 大留白 */
+.container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 4.5rem 1.5rem 3rem;
+}
+
+/* 姓名（大标题） */
+.name {
+  font-size: 1.9rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+/* 一句话头衔 */
+.tagline {
+  color: var(--muted);
+  margin: 0 0 2rem;
+}
+
+/* 区块小标题（Self-Introduction / Selected work） */
+h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 2.2rem 0 0.8rem;
+}
+
+p {
+  margin: 0.6rem 0;
+}
+
+/* Selected work 列表 */
+.works {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.works li {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.45rem 0;
+}
+
+.work-emoji {
+  flex-shrink: 0;
+}
+
+.work-body {
+  min-width: 0;
+}
+
+/* 链接 */
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+/* 底部联系方式 */
+.contacts {
+  margin-top: 3rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--muted);
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.sep {
+  margin: 0 0.15rem;
+}
+
+/* 手机窄屏适配 */
+@media (max-width: 480px) {
+  .container {
+    padding: 2.5rem 1.2rem 2rem;
+  }
+
+  .name {
+    font-size: 1.6rem;
+  }
+}
