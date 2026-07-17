@@ -649,3 +649,131 @@ a:focus-visible {
   font-size: 0.9rem;
   line-height: 1.6;
 }
+
+/* ========== 生活页配色：N.C. Wyeth 插画风（暖调油画 / 旧书页）==========
+   只覆盖配色变量和质感，布局完全不动。
+   亮色＝羊皮纸上的赭石/橄榄/熟褐；暗色＝他夜景画里的深褐烛光。 */
+html.life-page {
+  --bg-start: #f6efdc;
+  --bg-end: #e9dcc0;
+  --glow: rgba(176, 124, 42, 0.10);
+  --text: #3b2f23;
+  --muted: #7a6a52;
+  --link: #9a5b28;
+  --link-hover: #7c461d;
+  --card: rgba(120, 90, 40, 0.06);
+  --border: rgba(90, 65, 30, 0.22);
+  --g1: #b07c2a;
+  --g2: #6b7c3a;
+  --g3: #8c4a2f;
+}
+
+/* 画纸纤维质感 + 暖色光晕（替换掉默认的冷色光晕）；
+   z-index 提到 1：压过场景画布（z 0），让颗粒布纹罩在画面上，更像油画 */
+html.life-page body::before {
+  z-index: 1;
+  background:
+    radial-gradient(60vw 40vh at 20% 0%, var(--glow), transparent 70%),
+    radial-gradient(50vw 40vh at 90% 20%, var(--glow), transparent 70%),
+    repeating-linear-gradient(0deg, rgba(90, 65, 30, 0.02) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(90, 65, 30, 0.02) 0 2px, transparent 2px 4px);
+}
+
+/* 深色（两处的值保持一致：系统深色 / 手动关灯） */
+@media (prefers-color-scheme: dark) {
+  html.life-page:not([data-theme="light"]) {
+    --bg-start: #241c12;
+    --bg-end: #14100a;
+    --glow: rgba(217, 164, 91, 0.10);
+    --text: #ede0c8;
+    --muted: #b09d7f;
+    --link: #d9a45b;
+    --link-hover: #ecc07e;
+    --card: rgba(237, 214, 170, 0.07);
+    --border: rgba(237, 214, 170, 0.18);
+    --g1: #d9a45b;
+    --g2: #9aa356;
+    --g3: #c97b4a;
+  }
+}
+
+html.life-page[data-theme="dark"] {
+  --bg-start: #241c12;
+  --bg-end: #14100a;
+  --glow: rgba(217, 164, 91, 0.10);
+  --text: #ede0c8;
+  --muted: #b09d7f;
+  --link: #d9a45b;
+  --link-hover: #ecc07e;
+  --card: rgba(237, 214, 170, 0.07);
+  --border: rgba(237, 214, 170, 0.18);
+  --g1: #d9a45b;
+  --g2: #9aa356;
+  --g3: #c97b4a;
+}
+
+/* 照片统一罩一层极淡的旧画暖调，接近老插画的印刷感 */
+html.life-page .life-photo {
+  filter: sepia(0.14) saturate(0.95);
+}
+
+/* 卡片：在玻璃底上再加一层旧纸边缘的细腻描线；
+   底色加深 + 背后磨砂 blur，保证文字压在动态场景上仍清晰可读 */
+html.life-page .life-card {
+  background: rgba(246, 239, 220, 0.66);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 252, 240, 0.3),
+    0 1px 2px rgba(59, 47, 35, 0.08);
+}
+
+/* 页头也蒙一层半透明的旧纸薄板，标题/开场白不再被窗口天空干扰 */
+html.life-page .life-hero {
+  background: rgba(246, 239, 220, 0.34);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 16px;
+  padding: 0.4rem 1rem 1rem;
+}
+
+/* 区块标题和页脚链接：一层薄薄的米白辉光，衬在画面上更稳 */
+html.life-page h2,
+html.life-page .life-foot {
+  text-shadow:
+    0 1px 10px rgba(246, 239, 220, 0.8),
+    0 0 2px rgba(246, 239, 220, 0.6);
+}
+
+/* 夜晚版本的对应样式 */
+@media (prefers-color-scheme: dark) {
+  html.life-page:not([data-theme="light"]) .life-card {
+    background: rgba(28, 22, 14, 0.68);
+  }
+
+  html.life-page:not([data-theme="light"]) .life-hero {
+    background: rgba(20, 15, 9, 0.38);
+  }
+
+  html.life-page:not([data-theme="light"]) h2,
+  html.life-page:not([data-theme="light"]) .life-foot {
+    text-shadow:
+      0 1px 10px rgba(20, 14, 8, 0.85),
+      0 0 2px rgba(20, 14, 8, 0.6);
+  }
+}
+
+html.life-page[data-theme="dark"] .life-card {
+  background: rgba(28, 22, 14, 0.68);
+}
+
+html.life-page[data-theme="dark"] .life-hero {
+  background: rgba(20, 15, 9, 0.38);
+}
+
+html.life-page[data-theme="dark"] h2,
+html.life-page[data-theme="dark"] .life-foot {
+  text-shadow:
+    0 1px 10px rgba(20, 14, 8, 0.85),
+    0 0 2px rgba(20, 14, 8, 0.6);
+}

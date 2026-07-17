@@ -37,7 +37,7 @@ window.CONTENT = {
      图片放在 logos/ 文件夹里（logo 也可以直接填完整网址 https://...）。
      不想要 logo 的话，直接写 "一行文字" 就行。 */
   education: [
-    { logo: "pku.png",  text: "Peking University · School of Physics · 2025~2028" },
+    { logo: "pku.png",  text: "Peking University · School of Physics · 2025~now" },
     { logo: "sjtu.png", text: "Shanghai Jiao Tong University · School of Mechanical Engineering · 2021~2025" },
   ],
 
@@ -58,7 +58,7 @@ window.CONTENT = {
       title: "Intern",
       org: "Shanghai Nuclear Engineering Research and Design Institute · Control Department",
       logo: "snerdi.png",
-      desc: "Developed a lumped-parameter model of the SP-100 space nuclear reactor based on publicly available U.S. documents, solved the model's coupled partial differential equations numerically, and obtained the responses of key parameters under multiple operating conditions, providing support for the project's control system development.",
+      desc: "Developed a concentrate-parameter model of the SP-100 space nuclear reactor based on publicly available U.S. documents, solved the model's coupled partial differential equations numerically, and obtained the responses of key parameters under multiple operating conditions, providing support for the project's control system development.",
     },
   ],
 
