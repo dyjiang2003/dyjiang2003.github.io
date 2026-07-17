@@ -1,68 +1,343 @@
-/* 样式表：控制网页长什么样（颜色、字号、间距）。
- * 想改文字内容请去 content.js，这个文件只管外观。 */
+/* 样式表：控制网页长什么样（颜色、动效、字号、间距）。
+ * 想改文字内容请去 content.js，这个文件只管外观。
+ * 视觉风格参考物理主题官网：对角渐变背景 + 流光标题 + 玻璃质感。 */
 
-/* —— 浅色配色（默认）—— */
+/* —— 浅色配色（默认，即「开灯」）—— */
 :root {
-  --bg: #ffffff;
-  --text: #24292f;
-  --muted: #6b7280;
-  --link: #1a5fb4;
-  --link-hover: #0b3d91;
+  /* 字体搭配：正文用无衬线系统字体，区块标题/引言用衬线体，形成层次对比 */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto,
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-serif: Georgia, "Times New Roman", "Songti SC", "SimSun", serif;
+  --bg-start: #ffffff;
+  --bg-end: #e2e8f0;
+  --glow: rgba(37, 99, 235, 0.08);
+  --text: #1e293b;
+  --muted: #64748b;
+  --link: #2563eb;
+  --link-hover: #1d4ed8;
+  --card: rgba(30, 41, 59, 0.05);
+  --border: rgba(30, 41, 59, 0.12);
+  --g1: #2563eb;
+  --g2: #0891b2;
+  --g3: #7c3aed;
 }
 
-/* —— 深色配色（跟随系统深色模式自动切换）—— */
+/* —— 深色配色（即「关灯」）——
+   两处触发：系统深色模式（且用户没有手动开过灯）；
+   或用户手动关灯后 <html data-theme="dark">（见 render.js 的开关灯按钮）。
+   两处变量保持一致即可。 */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181d;
-    --text: #e4e6eb;
-    --muted: #9aa0a6;
-    --link: #6ea8fe;
-    --link-hover: #a3c2ff;
+  :root:not([data-theme="light"]) {
+    --bg-start: #1e293b;
+    --bg-end: #000000;
+    --glow: rgba(96, 165, 250, 0.10);
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --link: #60a5fa;
+    --link-hover: #93c5fd;
+    --card: rgba(148, 163, 184, 0.08);
+    --border: rgba(148, 163, 184, 0.16);
+    --g1: #60a5fa;
+    --g2: #22d3ee;
+    --g3: #a78bfa;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg-start: #1e293b;
+  --bg-end: #000000;
+  --glow: rgba(96, 165, 250, 0.10);
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --link: #60a5fa;
+  --link-hover: #93c5fd;
+  --card: rgba(148, 163, 184, 0.08);
+  --border: rgba(148, 163, 184, 0.16);
+  --g1: #60a5fa;
+  --g2: #22d3ee;
+  --g3: #a78bfa;
+}
+
+html {
+  /* 对角渐变铺满全屏，滚动时固定不动（这是详情页的背景） */
+  background: linear-gradient(135deg, var(--bg-start), var(--bg-end)) fixed;
 }
 
 body {
   margin: 0;
-  background: var(--bg);
+  min-height: 100vh;
   color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto,
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-sans);
   font-size: 16px;
-  line-height: 1.75;
+  line-height: 1.7;
 }
 
-/* 窄栏居中 + 大留白 */
+/* 顶部淡蓝光晕，增加层次 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60vw 40vh at 20% 0%, var(--glow), transparent 70%),
+    radial-gradient(50vw 40vh at 90% 20%, var(--glow), transparent 70%);
+}
+
+/* 涟漪画布：固定在最底层（详情页背景的一部分） */
+#bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ========== 第一页深空背景层 ==========
+   盖住涟漪层和浅色渐变，滚动过临界点后由 render.js 淡出。
+   星云配色与详情页涟漪同为蓝/青/紫，保证两页风格呼应。 */
+#space-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    radial-gradient(55vw 40vh at 78% 18%, rgba(124, 58, 237, 0.16), transparent 70%),
+    radial-gradient(45vw 36vh at 12% 32%, rgba(37, 99, 235, 0.18), transparent 70%),
+    radial-gradient(38vw 30vh at 55% 78%, rgba(8, 145, 178, 0.12), transparent 70%),
+    linear-gradient(180deg, #070b18 0%, #0b1026 60%, #05070f 100%);
+}
+
+/* 四周暗角，让视线聚焦中央的名字 */
+#space-layer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 50% 45%, transparent 55%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+/* 星空画布：铺满深空层（星星由 render.js 绘制） */
+#space-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 减弱动态：静态星空，整层不再固定，随第一页自然滚走 */
+#space-layer.static {
+  position: absolute;
+  height: 100vh;
+}
+
+/* ========== 开关灯按钮（只在详情页出现，见下方 body.page-2）========== */
+.theme-toggle {
+  position: fixed;
+  top: 1.1rem;
+  right: 1.1rem;
+  z-index: 10;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--card);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 0.4s ease,
+    transform 0.2s ease,
+    border-color 0.2s ease;
+}
+
+body.page-2 .theme-toggle {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.theme-toggle:hover {
+  transform: translateY(-2px);
+  border-color: var(--link);
+}
+
+/* 窄栏居中，内容浮在各背景层之上 */
 .container {
-  max-width: 680px;
+  position: relative;
+  z-index: 3;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 4.5rem 1.5rem 3rem;
+  padding: 0 1.5rem 3rem;
 }
 
-/* 姓名（大标题） */
+/* ========== 首页大字区（Hero）========== */
+.hero {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  will-change: transform, opacity; /* 换页视差用的 transform/opacity，见 render.js */
+  /* 第一页始终是夜空：名字流光直接用深色模式的亮色系，保证对比度 */
+  --g1: #60a5fa;
+  --g2: #22d3ee;
+  --g3: #a78bfa;
+}
+
+/* 姓名：渐变底色（静态/减弱动态时直接生效） */
 .name {
-  font-size: 1.9rem;
-  font-weight: 700;
-  margin: 0 0 0.25rem;
+  font-size: clamp(2.3rem, 7vw, 4rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+  margin: 0 0 1rem;
+  background-image: linear-gradient(
+    120deg, var(--g1), var(--g2) 35%, var(--g3) 65%, var(--g1)
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: shine 7s linear infinite;
 }
 
-/* 一句话头衔 */
-.tagline {
-  color: var(--muted);
-  margin: 0 0 2rem;
+@keyframes shine {
+  to { background-position: 220% center; }
 }
 
-/* 区块小标题（Self-Introduction / Selected work） */
-h2 {
-  font-size: 1.15rem;
+/* 逐字升起 + 每字自带流光渐变（渐变要落在每个字上：
+   父级 background-clip:text 叠子元素动画会丢字） */
+.char {
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(0.45em);
+  background-image: linear-gradient(
+    120deg, var(--g1), var(--g2) 35%, var(--g3) 65%, var(--g1)
+  );
+  background-size: 300% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation:
+    char-rise 0.55s cubic-bezier(0.22, 0.61, 0.36, 1) forwards,
+    char-shine 6s linear infinite;
+}
+
+@keyframes char-rise {
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes char-shine {
+  to { background-position: 300% center; }
+}
+
+/* 引言：名字正下方的名言（斜体衬线、稍粗；夜里用浅灰蓝，不跟随开关灯） */
+.quote {
+  margin: -0.4rem 0 1.2rem;
+  font-family: var(--font-serif);
+  font-style: italic;
   font-weight: 600;
-  margin: 2.2rem 0 0.8rem;
+  color: #b6c3d9;
+  font-size: clamp(1rem, 2.8vw, 1.25rem);
+  letter-spacing: 0.02em;
+}
+
+/* Education 区块：每条单独一行 */
+.edu-line {
+  display: block;
+}
+
+.edu-line + .edu-line {
+  margin-top: 0.15rem;
+}
+
+/* 校徽/公司 logo 小圆牌：
+   白底+细边框，保证透明校徽在深色模式下也看得清 */
+.logo-chip {
+  height: 1.4em;
+  width: 1.4em;
+  object-fit: contain;
+  vertical-align: -0.38em;
+  margin-right: 0.45em;
+  padding: 2px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--border);
+}
+
+/* 时间轴里标题旁的 logo 略小一点 */
+.tl-logo {
+  height: 1.25em;
+  width: 1.25em;
+  vertical-align: -0.3em;
+}
+
+/* 向下滚动提示箭头（同样只在第一页夜空上出现，用固定的浅色） */
+.scroll-hint {
+  margin-top: 4rem;
+  width: 16px;
+  height: 16px;
+  border-right: 2px solid rgba(226, 232, 240, 0.75);
+  border-bottom: 2px solid rgba(226, 232, 240, 0.75);
+  transform: rotate(45deg);
+  opacity: 0.6;
+  animation: hint-bounce 1.8s ease-in-out infinite;
+}
+
+@keyframes hint-bounce {
+  0%, 100% { transform: rotate(45deg) translate(0, 0); }
+  50% { transform: rotate(45deg) translate(7px, 7px); }
+}
+
+/* ========== 正文区块 ========== */
+
+/* 区块小标题：衬线体与正文形成对比，左侧渐变竖条 + 下划短线 */
+h2 {
+  position: relative;
+  font-family: var(--font-serif);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 2.6rem 0 0.9rem;
+  padding-bottom: 0.4rem;
+}
+
+h2::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 2.4rem;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--g1), var(--g2));
 }
 
 p {
   margin: 0.6rem 0;
 }
 
-/* Selected work 列表 */
+/* 滚动显现 */
+.reveal {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Selected work 列表：玻璃卡片感 + 悬浮高亮 */
 .works {
   list-style: none;
   margin: 0;
@@ -71,8 +346,21 @@ p {
 
 .works li {
   display: flex;
-  gap: 0.5rem;
-  margin: 0.45rem 0;
+  gap: 0.6rem;
+  margin: 0.5rem -0.8rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.works li:hover {
+  background: var(--card);
+  border-color: var(--border);
+  transform: translateX(5px);
 }
 
 .work-emoji {
@@ -81,39 +369,283 @@ p {
 
 .work-body {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-/* 链接 */
+/* 作品标题比正文稍醒目 */
+.work-title {
+  font-weight: 500;
+}
+
+.work-desc {
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* Experience 实习/科研经历：竖排时间轴（渐变细线 + 圆点节点） */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 1.6rem;
+  position: relative;
+}
+
+/* 竖线 */
+.timeline::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0.75em;
+  bottom: 0.75em;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--g1), var(--g2), var(--g3));
+  opacity: 0.35;
+}
+
+.timeline li {
+  position: relative;
+  padding: 0.4rem 0 0.9rem;
+}
+
+.timeline li:last-child {
+  padding-bottom: 0.2rem;
+}
+
+/* 节点圆点 */
+.timeline li::before {
+  content: "";
+  position: absolute;
+  left: -1.6rem;
+  top: 0.95em;
+  width: 10px;
+  height: 10px;
+  margin-left: 1px;
+  border-radius: 50%;
+  background: var(--g2);
+  box-shadow: 0 0 0 4px var(--card);
+}
+
+.tl-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.tl-head {
+  line-height: 1.5;
+}
+
+.tl-title {
+  font-weight: 600;
+}
+
+.tl-org {
+  color: var(--muted);
+}
+
+.tl-time {
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.04em;
+  /* 数字等宽，多条时间上下对齐更整齐 */
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-desc {
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin-top: 0.15rem;
+}
+
+/* 链接：下划线生长动画 */
 a {
   color: var(--link);
   text-decoration: none;
+  background-image: linear-gradient(var(--link), var(--link));
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  background-size: 0% 1px;
+  transition: background-size 0.3s ease, color 0.3s ease;
 }
 
 a:hover {
   color: var(--link-hover);
-  text-decoration: underline;
+  background-size: 100% 1px;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* 底部联系方式 */
 .contacts {
-  margin-top: 3rem;
-  padding-top: 1.2rem;
-  border-top: 1px solid var(--muted);
+  margin-top: 3.5rem;
+  padding: 1.4rem 0 0.5rem;
+  border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 0.95rem;
+  text-align: center;
 }
 
 .sep {
-  margin: 0 0.15rem;
+  margin: 0 0.35rem;
 }
 
 /* 手机窄屏适配 */
 @media (max-width: 480px) {
   .container {
-    padding: 2.5rem 1.2rem 2rem;
+    padding: 0 1.2rem 2rem;
+  }
+
+  .works li {
+    margin: 0.5rem -0.5rem;
+    padding: 0.5rem;
+  }
+}
+
+/* 系统开启「减弱动态效果」时：关闭所有动画，内容直接可见 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .char,
+  .reveal {
+    opacity: 1;
+    transform: none;
   }
 
   .name {
-    font-size: 1.6rem;
+    animation: none !important;
   }
+}
+
+/* ========== 首页 hero 里的生活页入口按钮（第一页夜空上用固定浅色）========== */
+.life-link {
+  margin-top: 1.6rem;
+  padding: 0.32rem 1.1rem;
+  border: 1px solid rgba(226, 232, 240, 0.35);
+  border-radius: 999px;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+  /* 不用普通链接的下划线生长效果 */
+  background-image: none;
+  color: #cbd5e1;
+  transition:
+    border-color 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease;
+}
+
+.life-link:hover {
+  background-image: none;
+  color: #ffffff;
+  border-color: rgba(226, 232, 240, 0.8);
+  transform: translateY(-2px);
+}
+
+/* ========== 生活页（life.html）========== */
+
+/* 页面顶部留出呼吸空间 */
+.life-hero {
+  padding-top: 2.4rem;
+}
+
+.life-nav {
+  margin: 0 0 0.4rem;
+  font-size: 0.95rem;
+}
+
+/* 页面底部的返回链接：居中，和最后一个板块拉开距离 */
+.life-foot {
+  margin: 2.5rem 0 0;
+  text-align: center;
+}
+
+/* 返回首页的链接朴素一点，不带下划线生长动画 */
+.life-nav a,
+.life-nav a:hover {
+  background-image: none;
+}
+
+/* 页面大标题：衬线 + 流光渐变（复用首页的 shine 动画），比首页名字小一号 */
+.life-title {
+  font-family: var(--font-serif);
+  font-size: clamp(1.9rem, 5.5vw, 2.8rem);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  margin: 0.2rem 0 0.5rem;
+  background-image: linear-gradient(
+    120deg, var(--g1), var(--g2) 35%, var(--g3) 65%, var(--g1)
+  );
+  background-size: 220% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: shine 9s linear infinite;
+}
+
+.life-intro {
+  color: var(--muted);
+  max-width: 34em;
+}
+
+/* 卡片网格：宽屏多列、窄屏自动单列 */
+.life-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 1rem;
+  margin: 0.4rem 0 0.8rem;
+}
+
+/* 卡片：玻璃质感（延续作品列表的观感），悬浮微微上浮 */
+.life-card {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 12px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  transition:
+    transform 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.life-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--link);
+}
+
+/* 卡片顶部照片：4:3 裁切铺满 */
+.life-photo {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+.life-card-body {
+  flex: 1; /* 同一行卡片等高时，纯文字卡片的内容垂直居中，不留大空白 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.65rem 0.9rem 0.85rem;
+}
+
+.life-card-title {
+  font-weight: 600;
+}
+
+.life-card-desc {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
 }
