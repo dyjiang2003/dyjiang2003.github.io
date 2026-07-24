@@ -44,6 +44,20 @@
     });
   }
 
+  // 系统深浅色在页面打开期间变化时自动跟随
+  //（用户手动选过时 applyTheme 里手动选择优先，所以直接重算即可）
+  if (window.matchMedia) {
+    var sysThemeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    var onSystemThemeChange = function () {
+      applyTheme();
+    };
+    if (sysThemeQuery.addEventListener) {
+      sysThemeQuery.addEventListener("change", onSystemThemeChange);
+    } else if (sysThemeQuery.addListener) {
+      sysThemeQuery.addListener(onSystemThemeChange); // 老版 Safari 兜底
+    }
+  }
+
   // 创建元素的小工具：tag 标签名，className 样式类，text 纯文本内容
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -152,6 +166,7 @@
     // 点击/触摸页面时，在指尖位置激起一圈涟漪
     window.addEventListener("pointerdown", function (e) {
       if (!palette.length) return; // 配色尚未就绪（理论上不会，稳妥起见）
+      if (window.scrollY <= 1) return; // 还在第一页夜空：涟漪留给详情页，夜空有流星
       rings.push({
         x: e.clientX,
         y: e.clientY,
@@ -257,8 +272,6 @@
     var W = 0;
     var H = 0;
     var stars = [];
-    var bandStars = []; // 银河带的密集小星
-    var bandAngle = -0.55; // 银河带倾角：从左下到右上（弧度）
     var meteors = [];
     var nextMeteorAt = 2000; // 第一颗流星稍微等一下，别一进门就划过
 
@@ -270,6 +283,117 @@
       "103,232,249",
       "196,181,253",
     ];
+
+    /* —— 粒子星系（形态参考 phybench.cn 首页）——
+       银盘旋臂 + 核心星团 + 晕层大颗粒，全部带 3D 坐标；
+       每帧做「自转 + 视角旋转 + 透视投影」，再用预渲染的软圆 sprite
+       以叠加发光模式画出（加法混合与顺序无关，省去深度排序）。 */
+    var disk = []; // 银盘粒子：两条旋臂，中心留空洞给名字
+    var core = []; // 核心星团：小而亮，向银心聚集
+    var halo = []; // 晕层：大而淡的 bokeh 光斑，烘出景深氛围
+    var dust = []; // 尘埃带：沿旋臂内侧分布的暗色吸光云（真实星系的尘埃道）
+    var fgStars = []; // 前景亮星：带十字星芒，屏幕空间固定，不随星系转
+    var bgGalaxies = []; // 远景星系：淡淡的椭圆光斑，增加纵深
+
+    // 预渲染一颗软边圆点（径向渐变），所有粒子共用这几种颜色的 sprite
+    function makeSprite(color) {
+      var c = document.createElement("canvas");
+      c.width = 64;
+      c.height = 64;
+      var g = c.getContext("2d");
+      if (!g) return c;
+      var grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      grad.addColorStop(0, "rgba(" + color + ",1)");
+      grad.addColorStop(0.35, "rgba(" + color + ",0.5)");
+      grad.addColorStop(1, "rgba(" + color + ",0)");
+      g.fillStyle = grad;
+      g.fillRect(0, 0, 64, 64);
+      return c;
+    }
+
+    // 星系专用补充色：暖金/暖白（核心与内盘）、紫粉（旋臂上的电离氢区）、深黑（尘埃带）
+    var galaxyColors = ["255,224,170", "255,236,200", "224,170,210", "10,8,20"];
+    var sprites = starColors.concat(galaxyColors).map(makeSprite);
+
+    // 预渲染带十字星芒的亮星 sprite（前景亮星用，哈勃照片里的衍射星芒）
+    function makeSpikeSprite(color) {
+      var c = document.createElement("canvas");
+      c.width = 128;
+      c.height = 128;
+      var g = c.getContext("2d");
+      if (!g) return c;
+      // 中心亮点
+      var core = g.createRadialGradient(64, 64, 0, 64, 64, 12);
+      core.addColorStop(0, "rgba(" + color + ",1)");
+      core.addColorStop(1, "rgba(" + color + ",0)");
+      g.fillStyle = core;
+      g.fillRect(0, 0, 128, 128);
+      // 十字芒：水平/垂直两条两端渐隐的细线
+      var lh = g.createLinearGradient(0, 0, 128, 0);
+      lh.addColorStop(0, "rgba(" + color + ",0)");
+      lh.addColorStop(0.5, "rgba(" + color + ",0.9)");
+      lh.addColorStop(1, "rgba(" + color + ",0)");
+      g.fillStyle = lh;
+      g.fillRect(0, 63.2, 128, 1.6);
+      var lv = g.createLinearGradient(0, 0, 0, 128);
+      lv.addColorStop(0, "rgba(" + color + ",0)");
+      lv.addColorStop(0.5, "rgba(" + color + ",0.9)");
+      lv.addColorStop(1, "rgba(" + color + ",0)");
+      g.fillStyle = lv;
+      g.fillRect(63.2, 0, 1.6, 128);
+      return c;
+    }
+
+    var spikeSprite = makeSpikeSprite("219,234,254");
+
+    // 视角状态：yaw/pitch 由拖拽改变，vYaw/vPitch 是松手后的惯性速度
+    var view = {
+      yaw: 0,
+      pitch: 0.72, // 初始俯仰角：星系呈斜放的椭圆盘，旋臂可见
+      vYaw: 0,
+      vPitch: 0,
+      down: false,
+      lastX: 0,
+      lastY: 0,
+      moved: 0,
+    };
+
+    // 三个随机数取平均近似正态（旋臂散射、核心聚集都用它）
+    function gauss3() {
+      return (Math.random() + Math.random() + Math.random()) / 1.5 - 1;
+    }
+
+    // 银盘粒子配色按半径渐变（真实星系的年龄分层）：
+    // 内盘偏暖白/暖金（老年星），中盘蓝/青（年轻热星），外盘偏蓝紫；
+    // 旋臂上撒少量紫粉结点（电离氢区，星系照片里的粉红 HII 区）
+    function pickDiskColor(r, inArm) {
+      var v = Math.random();
+      if (inArm && r > 0.4 && r < 0.9 && v < 0.05) return 7; // HII 区
+      if (r < 0.42) {
+        if (v < 0.35) return 6; // 暖白
+        if (v < 0.55) return 5; // 暖金
+        if (v < 0.8) return 0;
+        return 2;
+      }
+      if (r < 0.7) {
+        if (v < 0.35) return 2; // 蓝
+        if (v < 0.6) return 3; // 青
+        if (v < 0.8) return 4; // 紫
+        return Math.floor(Math.random() * 2);
+      }
+      if (v < 0.4) return 4; // 紫外盘为主
+      if (v < 0.7) return 2;
+      if (v < 0.9) return 3;
+      return 1;
+    }
+
+    // 核心粒子：暖白/暖金为主（老年星组成的核球）
+    function pickCoreColor() {
+      var v = Math.random();
+      if (v < 0.45) return 6;
+      if (v < 0.75) return 5;
+      return 0;
+    }
 
     // 按视口面积撒星，小屏自动变少
     function seed() {
@@ -289,70 +413,207 @@
       }
     }
 
-    // 撒银河带：沿一条斜贯屏幕的带轴，用近似正态分布把密集小星
-    // 堆在带轴附近，越靠边越稀，形成银河的朦胧星雾
-    function seedBand() {
-      bandStars = [];
-      var len = Math.sqrt(W * W + H * H); // 带轴长度（覆盖整条对角线）
-      var halfWidth = Math.min(W, H) * 0.24; // 带半宽
-      var count = Math.min(650, Math.round((W * H) / 2200));
-      var dirX = Math.cos(bandAngle);
-      var dirY = Math.sin(bandAngle);
-      for (var i = 0; i < count; i++) {
-        var along = (Math.random() - 0.5) * len * 1.1;
-        // 三个随机数取平均近似正态，让星星向带轴中心聚集
-        var gauss = (Math.random() + Math.random() + Math.random()) / 1.5 - 1;
-        var across = gauss * halfWidth;
-        bandStars.push({
-          x: W / 2 + dirX * along - dirY * across,
-          y: H / 2 + dirY * along + dirX * across,
-          r: 0.35 + Math.random() * 1.0,
-          base: 0.12 + Math.random() * 0.34,
-          speed: 0.0003 + Math.random() * 0.0006, // 比普通星星闪得更慢
-          phase: Math.random() * Math.PI * 2,
-          color: starColors[Math.floor(Math.random() * starColors.length)],
+    // 撒星系：粒子数量随视口面积缩放；坐标用「银心距 r + 方位角 a」存，
+    // 自转就是给所有粒子的 a 统一加一个随时间增长的相位
+    function seedGalaxy() {
+      disk = [];
+      core = [];
+      halo = [];
+      dust = [];
+      fgStars = [];
+      bgGalaxies = [];
+      var area = W * H;
+      var diskCount = Math.min(1800, Math.round(area / 950));
+      var coreCount = Math.min(240, Math.round(area / 6400));
+      var haloCount = Math.min(300, Math.round(area / 5000));
+      var dustCount = Math.min(420, Math.round(area / 2600));
+      var i;
+
+      // 银盘：指数盘（pow>1 把半径压向内侧，越靠内越密，真实星系的面密度）
+      for (i = 0; i < diskCount; i++) {
+        var r = 0.26 + 0.74 * Math.pow(Math.random(), 1.3);
+        var a;
+        var inArm = Math.random() < 0.85;
+        if (inArm) {
+          // 两条主旋臂：对数螺旋（角度随半径扭转）+ 越往外越散的散射
+          a = (i % 2) * Math.PI + r * 2.6 + gauss3() * (0.18 + r * 0.24);
+        } else {
+          a = Math.random() * Math.PI * 2; // 臂间弥散粒子
+        }
+        disk.push({
+          r: r,
+          a: a,
+          y: gauss3() * (0.03 + r * 0.02), // 银盘很薄，外沿略厚
+          size: 1.4 + Math.random() * 2.4,
+          alpha: 0.5 + Math.random() * 0.45,
+          color: pickDiskColor(r, inArm),
+          tw: 0.0005 + Math.random() * 0.0011,
+          ph: Math.random() * Math.PI * 2,
+        });
+      }
+
+      // 尘埃带：沿旋臂内侧（旋转方向的后沿）的暗色吸光云，
+      // 真实星系照片里旋臂旁那道暗纹就是它
+      for (i = 0; i < dustCount; i++) {
+        var dr = 0.3 + 0.65 * Math.pow(Math.random(), 1.3);
+        dust.push({
+          r: dr,
+          a: (i % 2) * Math.PI + dr * 2.6 - (0.16 + dr * 0.1) + gauss3() * 0.12,
+          y: gauss3() * 0.03,
+          size: 7 + Math.random() * 13,
+          alpha: 0.2 + Math.random() * 0.2,
+          color: 8, // 深黑尘埃 sprite
+          tw: 0, // 尘埃不闪烁
+          ph: 0,
+        });
+      }
+
+      // 核心星团：暖色，向银心聚集
+      for (i = 0; i < coreCount; i++) {
+        core.push({
+          r: Math.abs(gauss3()) * 0.15,
+          a: Math.random() * Math.PI * 2,
+          y: gauss3() * 0.05,
+          size: 1.4 + Math.random() * 2.6,
+          alpha: 0.45 + Math.random() * 0.5,
+          color: pickCoreColor(),
+          tw: 0.0006 + Math.random() * 0.0012,
+          ph: Math.random() * Math.PI * 2,
+        });
+      }
+
+      // 晕层大颗粒（淡而虚的 bokeh，只用冷色系）
+      for (i = 0; i < haloCount; i++) {
+        halo.push({
+          r: 0.45 + Math.random() * 1.35,
+          a: Math.random() * Math.PI * 2,
+          y: gauss3() * 0.55,
+          size: 9 + Math.random() * 26,
+          alpha: 0.035 + Math.random() * 0.085,
+          color: Math.floor(Math.random() * 5),
+          tw: 0.0003 + Math.random() * 0.0006,
+          ph: Math.random() * Math.PI * 2,
+        });
+      }
+
+      // 前景亮星（带星芒）：屏幕空间固定，不随星系转，像照片前景的亮星
+      var fgCount = Math.min(12, Math.round(area / 90000));
+      for (i = 0; i < fgCount; i++) {
+        fgStars.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          size: 14 + Math.random() * 22, // 星芒整体尺寸
+          alpha: 0.35 + Math.random() * 0.4,
+          tw: 0.0004 + Math.random() * 0.0008,
+          ph: Math.random() * Math.PI * 2,
+        });
+      }
+
+      // 远景星系：几个 tiny 的椭圆光斑，增加纵深
+      var bgCount = Math.min(6, Math.round(area / 250000));
+      for (i = 0; i < bgCount; i++) {
+        bgGalaxies.push({
+          x: Math.random() * W,
+          y: Math.random() * H,
+          w: 40 + Math.random() * 60,
+          h: 12 + Math.random() * 20,
+          rot: Math.random() * Math.PI,
+          alpha: 0.05 + Math.random() * 0.06,
+          color: Math.floor(Math.random() * 3),
         });
       }
     }
 
-    // 画银河带的柔光底色：两层沿带轴的横向渐变，中间亮、两边淡出
-    function drawBandGlow() {
-      var len = Math.sqrt(W * W + H * H) * 1.2;
-      var width = Math.min(W, H) * 0.55;
-      ctx.save();
-      ctx.translate(W / 2, H / 2);
-      ctx.rotate(bandAngle);
-
-      var grad = ctx.createLinearGradient(0, -width / 2, 0, width / 2);
-      grad.addColorStop(0, "rgba(147,197,253,0)");
-      grad.addColorStop(0.5, "rgba(186,215,251,0.065)");
-      grad.addColorStop(1, "rgba(147,197,253,0)");
-      ctx.fillStyle = grad;
-      ctx.fillRect(-len / 2, -width / 2, len, width);
-
-      var w2 = width * 0.42; // 更窄更亮的带芯
-      var grad2 = ctx.createLinearGradient(0, -w2 / 2, 0, w2 / 2);
-      grad2.addColorStop(0, "rgba(224,242,254,0)");
-      grad2.addColorStop(0.5, "rgba(224,242,254,0.06)");
-      grad2.addColorStop(1, "rgba(224,242,254,0)");
-      ctx.fillStyle = grad2;
-      ctx.fillRect(-len / 2, -w2 / 2, len, w2);
-
-      ctx.restore();
+    // 画一组星系粒子：自转（绕银心）→ 视角旋转（yaw 绕 Y、pitch 绕 X）→ 透视投影
+    function drawGalaxySet(list, spin, proj) {
+      for (var i = 0; i < list.length; i++) {
+        var p = list[i];
+        var ang = p.a + spin;
+        var x = Math.cos(ang) * p.r;
+        var z = Math.sin(ang) * p.r;
+        var y = p.y;
+        var x1 = x * proj.cosYaw - z * proj.sinYaw;
+        var z1 = x * proj.sinYaw + z * proj.cosYaw;
+        var y1 = y * proj.cosPitch - z1 * proj.sinPitch;
+        var z2 = y * proj.sinPitch + z1 * proj.cosPitch;
+        // 透视：近大远小；分母钳制下限，防止粒子飞到相机背后时投影爆炸
+        var k = proj.cam / Math.max(0.5, proj.cam + z2);
+        var sx = proj.cx + x1 * k * proj.S;
+        var sy = proj.cy + y1 * k * proj.S;
+        if (sx < -60 || sx > W + 60 || sy < -60 || sy > H + 60) continue;
+        var sz = p.size * k * proj.sizeK;
+        ctx.globalAlpha =
+          p.alpha * (0.72 + 0.28 * Math.sin(proj.t * p.tw + p.ph)) * Math.min(1, k * 1.05);
+        ctx.drawImage(sprites[p.color], sx - sz / 2, sy - sz / 2, sz, sz);
+      }
     }
 
-    // 画一遍星星：银河带柔光 → 银河带小星 → 普通星星（闪烁 + 极慢上飘，
-    // dt=0 时即静止，静态模式也用它）
+    // 画整个星系：远景星系 → 晕层 → 银盘 → 尘埃带 → 核心 → 银心辉光 → 前景亮星
+    function drawGalaxy(t) {
+      var S = Math.min(W, H) * 0.44; // 星系半径对应的屏幕像素
+      var proj = {
+        t: t,
+        S: S,
+        cx: W / 2,
+        cy: H * 0.5, // 银心在屏幕正中，名字坐在环心空洞里
+        cam: 3.0, // 相机距离（以星系半径为 1）
+        sizeK: S / 260, // 粒子尺寸随屏幕缩放
+        cosYaw: Math.cos(view.yaw),
+        sinYaw: Math.sin(view.yaw),
+        cosPitch: Math.cos(view.pitch),
+        sinPitch: Math.sin(view.pitch),
+      };
+      var spin = t * 0.00006; // 自转：约 105 秒一圈
+      var i;
+
+      // 远景星系：屏幕空间的淡淡椭圆光斑（默认 source-over）
+      for (i = 0; i < bgGalaxies.length; i++) {
+        var bg = bgGalaxies[i];
+        ctx.save();
+        ctx.translate(bg.x, bg.y);
+        ctx.rotate(bg.rot);
+        ctx.globalAlpha = bg.alpha;
+        ctx.drawImage(sprites[bg.color], -bg.w / 2, -bg.h / 2, bg.w, bg.h);
+        ctx.restore();
+      }
+
+      ctx.globalCompositeOperation = "lighter";
+      drawGalaxySet(halo, spin, proj);
+      drawGalaxySet(disk, spin, proj);
+
+      // 尘埃带：切回普通模式，暗色软斑叠在亮臂上「吸光」，
+      // 形成旋臂内侧的暗纹（真实星系照片里的尘埃道）
+      ctx.globalCompositeOperation = "source-over";
+      drawGalaxySet(dust, spin, proj);
+
+      // 核心星团 + 三层银心辉光（暖金大晕 → 暖白中晕 → 亮核）
+      ctx.globalCompositeOperation = "lighter";
+      drawGalaxySet(core, spin, proj);
+      var glows = [
+        [5, 0.3, S * 1.05],
+        [6, 0.35, S * 0.5],
+        [6, 0.7, S * 0.13],
+      ];
+      for (i = 0; i < glows.length; i++) {
+        ctx.globalAlpha = glows[i][1];
+        var gs = glows[i][2];
+        ctx.drawImage(sprites[glows[i][0]], proj.cx - gs / 2, proj.cy - gs / 2, gs, gs);
+      }
+
+      // 前景亮星：带十字星芒，屏幕空间固定，不随星系转
+      for (i = 0; i < fgStars.length; i++) {
+        var fs = fgStars[i];
+        ctx.globalAlpha = fs.alpha * (0.7 + 0.3 * Math.sin(t * fs.tw + fs.ph));
+        ctx.drawImage(spikeSprite, fs.x - fs.size / 2, fs.y - fs.size / 2, fs.size, fs.size);
+      }
+
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = "source-over";
+    }
+
+    // 画一遍远景星星：闪烁 + 极慢上飘（dt=0 时即静止，静态模式也用它）
     function drawStars(t, dt) {
       ctx.clearRect(0, 0, W, H);
-      drawBandGlow();
-      bandStars.forEach(function (s) {
-        var alpha = s.base * (0.7 + 0.3 * Math.sin(t * s.speed + s.phase));
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = "rgba(" + s.color + "," + alpha.toFixed(3) + ")";
-        ctx.fill();
-      });
       stars.forEach(function (s) {
         s.y -= s.vy * dt;
         if (s.y < -2) s.y = H + 2; // 飘出顶部回到底部
@@ -412,26 +673,97 @@
       canvas.style.height = H + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       seed();
-      seedBand();
-      if (reducedMotion) drawStars(0, 0); // 静态模式：变化后补画一次
+      seedGalaxy();
+      if (reducedMotion) {
+        drawStars(0, 0); // 静态模式：变化后补画一次
+        drawGalaxy(0);
+      }
     }
     window.addEventListener("resize", resize);
     resize();
 
-    // 减弱动态：静态星空，整层随第一页自然滚走（见 style.css 的 .static）
+    // 减弱动态：静态星空 + 静态星系，整层随第一页自然滚走（见 style.css 的 .static）
     if (reducedMotion) {
       layer.classList.add("static");
       return;
     }
+
+    /* —— 拖拽转视角 + 点击划流星 ——
+       按住拖动：水平改 yaw、垂直改 pitch（触屏的垂直拖动留给页面滚动，不抢）；
+       松手后带惯性滑行；若几乎没动（<6px）算点击，从指尖划出一颗流星。
+       只在第一页生效：翻到详情页后夜空层已淡出，不抢涟漪的戏 */
+    function onPointerDown(e) {
+      if (document.body.classList.contains("page-2")) return;
+      if (e.target.closest && e.target.closest("a, button")) return; // 链接/按钮正常点击
+      view.down = true;
+      view.moved = 0;
+      view.lastX = e.clientX;
+      view.lastY = e.clientY;
+      view.vYaw = 0;
+      view.vPitch = 0;
+      document.body.classList.add("galaxy-dragging");
+    }
+
+    function onPointerMove(e) {
+      if (!view.down) return;
+      var dx = e.clientX - view.lastX;
+      var dy = e.clientY - view.lastY;
+      view.lastX = e.clientX;
+      view.lastY = e.clientY;
+      view.moved += Math.abs(dx) + Math.abs(dy);
+      var dYaw = dx * 0.005;
+      view.yaw += dYaw;
+      view.vYaw = view.vYaw * 0.7 + dYaw * 0.3; // 平滑出松手后的惯性速度
+      if (e.pointerType !== "touch") {
+        var dPitch = dy * 0.005;
+        view.pitch = Math.min(1.35, Math.max(-1.35, view.pitch + dPitch));
+        view.vPitch = view.vPitch * 0.7 + dPitch * 0.3;
+      }
+    }
+
+    function onPointerUp(e) {
+      if (!view.down) return;
+      view.down = false;
+      document.body.classList.remove("galaxy-dragging");
+      if (view.moved < 6) {
+        // 点击（没拖动）：从指尖划出一颗流星
+        var dir = Math.random() < 0.5 ? 1 : -1;
+        meteors.push({
+          x: e.clientX,
+          y: e.clientY,
+          vx: dir * (0.55 + Math.random() * 0.4),
+          vy: 0.22 + Math.random() * 0.18,
+          born: performance.now(), // 与 rAF 时间戳同一时钟，drawMeteors 里直接相减
+          life: 700 + Math.random() * 300,
+        });
+      }
+    }
+
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("pointercancel", onPointerUp); // 触屏手势被浏览器接管时收尾
 
     var prev = 0;
     function frame(t) {
       var dt = Math.min(t - prev || 16.7, 50);
       prev = t;
 
+      // 松手后的惯性滑行：速度按帧率无关的方式衰减
+      if (!view.down && (view.vYaw || view.vPitch)) {
+        var decay = Math.pow(0.94, dt / 16.7);
+        view.yaw += view.vYaw * (dt / 16.7);
+        view.pitch = Math.min(1.35, Math.max(-1.35, view.pitch + view.vPitch * (dt / 16.7)));
+        view.vYaw *= decay;
+        view.vPitch *= decay;
+        if (Math.abs(view.vYaw) < 0.00001) view.vYaw = 0;
+        if (Math.abs(view.vPitch) < 0.00001) view.vPitch = 0;
+      }
+
       // 翻到详情页后整层已淡出，停止绘制省电
       if (!document.body.classList.contains("page-2")) {
         drawStars(t, dt);
+        drawGalaxy(t);
         if (t > nextMeteorAt) {
           spawnMeteor(t);
           nextMeteorAt = t + 2500 + Math.random() * 3000; // 平均约 4 秒一颗
@@ -503,7 +835,7 @@
   function initThemeToggle() {
     var btn = el("button", "theme-toggle");
     btn.type = "button";
-    btn.setAttribute("aria-label", "开关灯：切换深色 / 浅色背景");
+    btn.setAttribute("aria-label", "Toggle dark / light background");
 
     function refreshIcon() {
       btn.textContent = themeDark ? "☀️" : "🌙"; // 图标提示「点下去会变成什么」
@@ -543,7 +875,9 @@
       // 逐字升起：每个字一个 span，依次延迟出现；
       // 第二个延迟给流光动画（负值错位，形成扫过整行名字的波浪）
       String(data.name).split("").forEach(function (ch, index) {
-        var span = el("span", "char", ch === " " ? " " : ch);
+        // 空格必须换成不换行空格：inline-block 的 span 里普通空格会塌成
+        // 零宽，名字里的空格就丢了（"Dingyan Jiang" 变成 "DingyanJiang"）
+        var span = el("span", "char", ch === " " ? " " : ch);
         span.style.animationDelay =
           (0.05 * index).toFixed(2) + "s, " + (-0.45 * index).toFixed(2) + "s";
         h1.appendChild(span);

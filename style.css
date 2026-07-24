@@ -163,6 +163,18 @@ body.page-2 .theme-toggle {
   border-color: var(--link);
 }
 
+/* 键盘聚焦时给出清晰的焦点框（无障碍） */
+.theme-toggle:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+/* 选中文字的颜色：呼应蓝/青/紫主色，深浅色下都可读 */
+::selection {
+  background: rgba(96, 165, 250, 0.35);
+  color: inherit;
+}
+
 /* 窄栏居中，内容浮在各背景层之上 */
 .container {
   position: relative;
@@ -181,10 +193,19 @@ body.page-2 .theme-toggle {
   align-items: center;
   text-align: center;
   will-change: transform, opacity; /* 换页视差用的 transform/opacity，见 render.js */
+  cursor: grab; /* 第一页的星系可以拖拽转视角（见 render.js 的拖拽逻辑） */
+  user-select: none; /* 拖拽时不误选名字/引言文字 */
+  -webkit-user-select: none;
   /* 第一页始终是夜空：名字流光直接用深色模式的亮色系，保证对比度 */
   --g1: #60a5fa;
   --g2: #22d3ee;
   --g3: #a78bfa;
+}
+
+/* 拖拽星系过程中的抓手光标（render.js 在 body 上切换这个类） */
+body.galaxy-dragging,
+body.galaxy-dragging .hero {
+  cursor: grabbing;
 }
 
 /* 姓名：渐变底色（静态/减弱动态时直接生效） */

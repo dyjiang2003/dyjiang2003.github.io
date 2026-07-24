@@ -1,0 +1,75 @@
+# AGENTS.md — 给后续维护本项目的 agent
+
+这份文件沉淀了项目主人在多轮需求中的明确要求、审美偏好和技术约定。
+动手改任何东西之前请先读完，尤其是「硬性规则」和「用户审美偏好」。
+
+## 项目是什么
+
+- 蒋鼎言（Dingyan Jiang）的个人主页，**零依赖、零构建**的纯静态站点。
+- 线上地址：<https://dyjiang2003.github.io/>（GitHub Pages user site）。
+- 技术栈：原生 HTML/CSS/JS + Canvas。**没有任何框架、构建步骤、外部库——这是硬约束，不要引入**（包括 npm 依赖、webfont、CDN 脚本）。
+
+## 硬性规则（用户明确要求，优先级最高）
+
+1. **页面可见内容一律英文**；JS 文件里的**注释一律中文**（保持"人类可维护"是用户原话）。README 也用中文。
+2. **用户会自己编辑内容文件**（content.js、life-content.js 已有多处自改文案）。不要"顺手优化"用户的文案和术语选择——除非用户明确要求，否则只改代码和样式，不动文字内容。
+3. **维护约定必须保持**：改文字只动 content.js / life-content.js；照片放 `photos/`、logo 放 `logos/`。任何新功能都要延续"改配置即可"的零门槛模式，配置文件注释保持中文。
+4. **改完必须用真实浏览器验证**：本项目的习惯是用 Playwright 截图各状态 + 收集控制台报错，确认无误才算完成（环境里有全局可用的 playwright，从 npx 缓存加载）。只改不看是不可接受的。
+
+## 文件结构
+
+| 文件 | 作用 | 谁改它 |
+|---|---|---|
+| `content.js` | 主页全部文字配置（注释中文） | 用户 / 按需求改 |
+| `life-content.js` | 生活页全部文字配置 | 用户 / 按需求改 |
+| `render.js` | 主页渲染 + 星空/涟漪/换页/开关灯 | agent 按需求改 |
+| `life-render.js` | 生活页渲染 + 油画场景画布 | agent 按需求改 |
+| `style.css` | 全部样式（配色变量 + 布局 + 特效层） | agent 按需求改 |
+| `index.html` / `life.html` | 页面骨架（基本不用动） | 基本不动 |
+| `favicon.svg` | 标签页图标（深空底 + 渐变星星，两页共用） | 基本不动 |
+| `logos/` | 校徽/公司 logo（配置里只写文件名） | 用户上传 |
+| `photos/` | 生活页卡片照片（配置里只写文件名） | 用户上传 |
+| `README.md` | 面向用户的中文维护手册 | 结构变化时同步更新 |
+
+## 主页（index.html）架构
+
+- `render.js` 读 `content.js` 渲染一切。页面结构：第一页 hero（星空 + 名字 + 引言 + Life 入口按钮）→ 下滑换页 → 详情（Self-Introduction / Education / Experience / Selected work / contacts）。
+- **换页特效**：临界点 `t = scrollY / (0.72 × 视口高)`；hero 滞后+缩小+淡出，`#space-layer` 按 smoothstep 交叉淡化。`body.page-2`（t≥0.9）控制开关灯按钮出现、星空画布停绘。不要改成劫持滚动的强制翻页（已明确否决）。
+- **点击交互分工**：第一页拖拽转星系视角，松手位移 <6px 才算点击、从指尖划流星（pointerup 判定，链接/按钮上的按下不触发）；详情页点背景激起涟漪（`scrollY <= 1` 时不产涟漪）。
+- **背景分层**（后到前）：html 对角渐变 → `body::before` 光晕 → `#bg-canvas` 涟漪(z0) → `#space-layer` 星空(z2) → `.container` 内容(z3) → `.theme-toggle`(z10)。星空层主体是**可拖拽的 3D 粒子星系**（形态参考 phybench.cn，纯 Canvas 2D 透视投影 + 叠加发光，无 WebGL/库）：指数盘双旋臂（内盘暖金 → 中盘蓝青 → 外盘蓝紫，臂上撒紫粉 HII 结点）+ 旋臂内侧的暗色尘埃带 + 暖金核心三层辉光 + 晕层 bokeh + 带十字星芒的前景亮星 + 远景小星系；自动自转（约 105s/圈），鼠标拖拽改 yaw/pitch 视角（松手带惯性；触屏垂直拖动留给页面滚动）。
+- **主题（开关灯）**：手动选择存 `localStorage("theme")` > 系统 `prefers-color-scheme`。CSS 变量三处维护：`:root`（亮）/ `:root[data-theme="dark"]` / `@media dark :not([data-theme="light"])`，改动需三处同步。`render.js` 里 `themeListeners` 通知画布换色，**涟漪 palette 与 CSS 的 --g1/--g2/--g3 要保持同一色系**（主页蓝/青/紫）。
+- 第一页（夜空）上的元素用固定浅色，不随开关灯变化（hero 的 --g 覆盖、quote 色、scroll-hint 色）。
+
+## 生活页（life.html）架构
+
+- `life-render.js` 读 `life-content.js`，schema：`{ title, intro, sections: [{ heading, items: [{ emoji?, title, photo?, desc? }] }] }`；没有 photo 的卡片自动纯文字且内容垂直居中。
+- **背景 `initScene`**：Wyeth 油画风「窗边读书台」，两层结构——
+  - 油画底层 `roomC`（仅加载/resize 时烘焙）：破色灰泥墙、分板木地板、椭圆编织地毯、褶皱窗帘+帘杆、木纹窗框、窗台绿植、带框小挂画、厚书桌（书堆/摊开的书+红书签/茶杯/铜台灯）、翼背扶手椅（高靠背/鼓座垫/双扶手/短木腿/搭毯），靠 `strokes()` 短笔触 + 柔边色斑烘出油画感，最后统一罩染把各元素揉合；
+  - 动态层（每帧）：窗内天空（油画云/日/月/星/树影）、窗内光束 + 照进房间的光束（含浮尘）、地板窗影、茶杯热气、台灯暖光、昼夜罩色、颗粒+暗角。
+- **昼夜循环**：`DAY_MS = 120000`（两分钟一天），`STOPS` 关键帧线性插值。**页面深浅色由场景时间驱动**（t≥0.76 或 <0.08 为夜），不是 localStorage——生活页没有开关灯按钮，别加回来（用户没要求）。
+- **物理正确性（用户特别纠正过，别再改回去）**：地板窗影的偏斜方向必须与光源移动**相反**：`skew = (窗口中心x − 光源x) × 0.6`。光束落地偏斜同向联动。
+- `?t=0.xx` 定格调试；`prefers-reduced-motion` 时定格在 0.62（金色黄昏）。
+- 配色：暖色 赭石/橄榄/熟褐，与 `style.css` 里 `html.life-page` 的 `--g1..3` 对应。卡片/页头用磨砂半透明底（backdrop-filter blur）保证场景上的文字可读性——场景再美，文字可读性优先。
+
+## 用户审美偏好（历史反馈，别再踩坑）
+
+- **喜欢**：涟漪/波纹效果；视差 + 交叉淡化的换页；克制有层次的排版；物理正确的光影细节。
+- **明确拒绝过**：
+  - 简笔画/扁平矢量风格（生活页场景初版被打回，重做成油画笔触才通过）；
+  - 太花哨的字体效果（排版要"不要太花哨，但也不要呆板"）；
+  - 劫持滚动的强制翻页。
+- **排版约定**：正文系统无衬线，标题/引言用衬线（Georgia）；字号字重层级见 style.css 注释；时间数字用 tabular-nums。
+
+## 部署
+
+```bash
+git add -A && git commit -m "英文提交信息" && git push origin main
+```
+
+- GitHub Pages 约 1 分钟生效；**推送后要验证**：curl 轮询线上文件的特征串确认部署落地（本项目此前的做法）。
+- `.DS_Store` 已被 `.gitignore` 屏蔽，提交前 `git status` 确认没有遗漏未跟踪文件。
+
+## 已知事项 / 待办
+
+- `content.js` 里 Selected work、GitHub 用户名等仍是占位符，等用户自己填。
+- "concentrate-parameter model"（标准术语为 lumped-parameter）是用户自改的措辞，已按其文本保留，不要回改。
