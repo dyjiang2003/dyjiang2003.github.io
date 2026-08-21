@@ -35,8 +35,8 @@
 
 - `render.js` 读 `content.js` 渲染一切。页面结构：第一页 hero（星空 + 名字 + 引言 + Life 入口按钮）→ 下滑换页 → 详情（Self-Introduction / Education / Experience / Selected work / contacts）。
 - **换页特效**：临界点 `t = scrollY / (0.72 × 视口高)`；hero 滞后+缩小+淡出，`#space-layer` 按 smoothstep 交叉淡化。`body.page-2`（t≥0.9）控制开关灯按钮出现、星空画布停绘。不要改成劫持滚动的强制翻页（已明确否决）。
-- **点击交互分工**：第一页拖拽转星系视角，松手位移 <6px 才算点击、从指尖划流星（pointerup 判定，链接/按钮上的按下不触发）；详情页点背景激起涟漪（`scrollY <= 1` 时不产涟漪）。
-- **背景分层**（后到前）：html 对角渐变 → `body::before` 光晕 → `#bg-canvas` 涟漪(z0) → `#space-layer` 星空(z2) → `.container` 内容(z3) → `.theme-toggle`(z10)。星空层主体是**可拖拽的 3D 粒子星系**（形态参考 phybench.cn，纯 Canvas 2D 透视投影 + 叠加发光，无 WebGL/库）：指数盘双旋臂（内盘暖金 → 中盘蓝青 → 外盘蓝紫，臂上撒紫粉 HII 结点）+ 旋臂内侧的暗色尘埃带 + 暖金核心三层辉光 + 晕层 bokeh + 带十字星芒的前景亮星 + 远景小星系；自动自转（约 105s/圈），鼠标拖拽改 yaw/pitch 视角（松手带惯性；触屏垂直拖动留给页面滚动）。
+- **点击交互分工**：第一页拖拽转星系视角，松手位移 <6px 才算点击、从指尖划流星（pointerup 判定，链接/按钮上的按下不触发）；详情页点击 = 涟漪 + **引力波**（阻尼振荡波包把点击处周边的星点沿径向推开再振荡弹回 + 三圈「呼吸」振荡环，约 1.6s 衰减完）；`scrollY <= 1` 时两者都不触发。
+- **背景分层**（后到前）：html 对角渐变 → `body::before` 光晕 → `#bg-canvas` 涟漪/星河(z0) → `#space-layer` 星空(z2) → `.container` 内容(z3) → `.theme-toggle`(z10)。星空层主体是**可拖拽的 3D 粒子星系**（形态参考 phybench.cn，纯 Canvas 2D 透视投影 + 叠加发光，无 WebGL/库）：指数盘双旋臂（内盘暖金 → 中盘蓝青 → 外盘蓝紫，臂上撒紫粉 HII 结点）+ 旋臂内侧的暗色尘埃带 + 暖金核心三层辉光 + 晕层 bokeh + 盘面薄纱（极淡微粒填出连续星光底子）+ 带十字星芒的前景亮星 + 远景小星系；自动自转（约 105s/圈），鼠标拖拽改 yaw/pitch 视角（松手带惯性；触屏垂直拖动留给页面滚动）。第二页 `#bg-canvas` 上除涟漪波源外还有一条**朦胧星河**（斜贯屏幕、微微弯曲的星雾带：两层带形柔光做底子 + ~340 颗微粒沿带轴缓慢流动、流出屏外卷回，约三成半带蓝/青/紫色调 + ~90 颗散布的自由星点；亮度刻意压低保证文字可读）；自动涟漪发波刻意稀疏（4.2~6.4s/源）。
 - **主题（开关灯）**：手动选择存 `localStorage("theme")` > 系统 `prefers-color-scheme`。CSS 变量三处维护：`:root`（亮）/ `:root[data-theme="dark"]` / `@media dark :not([data-theme="light"])`，改动需三处同步。`render.js` 里 `themeListeners` 通知画布换色，**涟漪 palette 与 CSS 的 --g1/--g2/--g3 要保持同一色系**（主页蓝/青/紫）。
 - 第一页（夜空）上的元素用固定浅色，不随开关灯变化（hero 的 --g 覆盖、quote 色、scroll-hint 色）。
 

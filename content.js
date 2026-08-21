@@ -26,7 +26,7 @@ window.CONTENT = {
      段落内部想换行，在文字里写 \n 即可。 */
   intro: [
     "Bachelor's degree in Nuclear Engineering and Technology, with a minor in Public Administration @Shanghai Jiao Tong University. Currently pursuing a Master's degree in Nuclear Science and Technology @Peking University. Expected to graduate in 2028.",
-    "I'm now an intern at Moonshot AI, focusing on model physics-capability evaluation, data generation, and post-training.",
+    "I'm now an intern at Ant Group, focusing on model physics-capability evaluation, data generation, and post-training.",
     "I'm interested in everything that helps to understand the world and transform it!",
   ],
 
@@ -46,6 +46,13 @@ window.CONTENT = {
      title：岗位/身份；org：公司/团队；time：起止时间。
      logo、link、desc 都是可选的，不想要就整行删掉。 */
   experience: [
+    {
+      time: "Sep 2026 – Present",
+      title: "Intern",
+      org: "Ant Group · Foundation Intelligence Technology Department · Language and Machine Intelligence Department",
+      logo: "antgroup.jpg", // （可选）公司/学校的 logo，图片放在 logos/ 文件夹里；没有就整行删掉
+      desc: "Responsible for building the model physics-capability evaluation system, data generation, and post-training.", // （可选）不想要就整行删掉
+    },
     {
       time: "Jul 2026 – Sep 2026",
       title: "Intern",

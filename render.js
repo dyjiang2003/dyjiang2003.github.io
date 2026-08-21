@@ -125,6 +125,7 @@
     var palette = [];
 
     var rings = [];
+    var gwaves = []; // 进行中的引力波（点击产生，随时间衰减消失）
     var sources = [];
     var i;
     for (i = 0; i < 3; i++) {
@@ -133,8 +134,8 @@
         a2: 0.00016 + i * 0.00005,
         p1: i * 2.1, // 相位错开，波源各自漂移
         p2: i * 1.3,
-        last: -i * 650, // 初始相位错开，别一起发波
-        interval: 1950 + i * 420, // 每个波源发波周期不同，形成干涉感
+        last: -i * 1400, // 初始相位错开，别一起发波
+        interval: 4200 + i * 1100, // 每个波源发波周期不同，形成干涉感（刻意稀疏，别喧宾夺主）
         color: "", // 颜色由下方主题回调填入
         x: 0,
         y: 0,
@@ -151,19 +152,61 @@
       }
     });
 
-    // 漂浮微粒（星点感）
+    // 远星场微粒（第二页背景的星空感）：多为细小微粒，缓慢漂移 + 轻轻闪烁，
+    // 约两成带蓝/青/紫色调；亮度压得很低，不抢文字的戏；
+    // ox/oy 是引力波经过造成的震荡位移（每帧重算，平时为 0）
     var dots = [];
-    for (i = 0; i < 70; i++) {
+    var dotCount = Math.min(90, Math.round((W * H) / 14000));
+    for (i = 0; i < dotCount; i++) {
+      var tintRoll = Math.random();
       dots.push({
         x: Math.random(),
         y: Math.random(),
         vx: (Math.random() - 0.5) * 0.000012,
         vy: (Math.random() - 0.5) * 0.000012,
-        r: 0.8 + Math.random() * 1.4,
+        r: 0.5 + Math.random() * Math.random() * 1.6, // 多为极小星点，少数略大
+        base: 0.4 + Math.random() * 0.6, // 亮度基数（绘制时随主题再缩放）
+        tint: tintRoll < 0.22 ? Math.floor(tintRoll * 15) % 3 : -1, // 蓝/青/紫的淡色星
+        tw: 0.0004 + Math.random() * 0.001, // 闪烁角速度
+        ph: Math.random() * Math.PI * 2,
+        river: false,
+        ox: 0,
+        oy: 0,
       });
     }
 
-    // 点击/触摸页面时，在指尖位置激起一圈涟漪
+    /* —— 朦胧星河：一条微微弯曲、斜贯屏幕的星雾带 ——
+       微粒坐标用「沿带轴 a + 横向偏移 b」存，a 随时间推进 = 沿河流动，
+       流出一端后在屏幕外卷回；横向偏移近似正态，向带芯聚集 */
+    var riverAngle = -0.5; // 带轴倾角：左下 → 右上
+    var riverBend = 0.22; // 弯曲量（正弦挠度，占半宽的比例）
+    (function seedRiver() {
+      var len = Math.sqrt(W * W + H * H) * 1.15; // 带轴长度（两端伸出屏外）
+      var halfW = Math.min(W, H) * 0.3; // 带半宽
+      var count = Math.min(420, Math.round((W * H) / 3000));
+      for (var i2 = 0; i2 < count; i2++) {
+        var tintRoll2 = Math.random();
+        dots.push({
+          river: true,
+          a: (Math.random() - 0.5) * len, // 沿带轴位置
+          b: ((Math.random() + Math.random() + Math.random()) / 1.5 - 1) * halfW, // 向带芯聚集
+          va: (len / 52000) * (0.7 + Math.random() * 0.6), // 流速：约 50 秒过一遍屏
+          len: len,
+          halfW: halfW,
+          x: 0, // 分数坐标每帧由带几何算出
+          y: 0,
+          r: 0.4 + Math.random() * Math.random() * 1.3,
+          base: 0.3 + Math.random() * 0.5,
+          tint: tintRoll2 < 0.35 ? Math.floor(tintRoll2 * 10) % 3 : -1, // 星河多带些色调
+          tw: 0.0004 + Math.random() * 0.0009,
+          ph: Math.random() * Math.PI * 2,
+          ox: 0,
+          oy: 0,
+        });
+      }
+    })();
+
+    // 点击/触摸页面时，在指尖位置激起一圈涟漪 + 一次引力波震荡
     window.addEventListener("pointerdown", function (e) {
       if (!palette.length) return; // 配色尚未就绪（理论上不会，稳妥起见）
       if (window.scrollY <= 1) return; // 还在第一页夜空：涟漪留给详情页，夜空有流星
@@ -176,6 +219,9 @@
         width: 2,
         dr: 0.16,
       });
+      // 引力波：点击瞬间的「时空震荡」——一道阻尼振荡的波包从点击处向外传播，
+      // 波前经过处的微粒被沿径向推开再振荡弹回（见下方 frame 里的处理）
+      gwaves.push({ x: e.clientX, y: e.clientY, born: performance.now() });
     });
 
     var prev = 0;
@@ -192,13 +238,90 @@
       ctx.clearRect(0, 0, W, H);
       ctx.globalCompositeOperation = themeDark ? "lighter" : "source-over";
 
-      // 微粒
-      ctx.fillStyle = themeDark ? "rgba(226,232,240,0.25)" : "rgba(30,41,59,0.15)";
+      // 朦胧星河的河光底子：两层横向渐变的带形柔光（外层薄纱 + 窄亮带芯）
+      if (palette.length) {
+        ctx.save();
+        ctx.translate(W / 2, H / 2);
+        ctx.rotate(riverAngle);
+        var bandLen = Math.sqrt(W * W + H * H) * 1.2;
+        var bandW = Math.min(W, H) * 0.62; // 外层带宽
+        var coreW = bandW * 0.4; // 更窄更亮的带芯
+        var g1 = ctx.createLinearGradient(0, -bandW / 2, 0, bandW / 2);
+        g1.addColorStop(0, "rgba(" + palette[0] + ",0)");
+        g1.addColorStop(0.5, "rgba(" + palette[0] + "," + (themeDark ? 0.05 : 0.032) + ")");
+        g1.addColorStop(1, "rgba(" + palette[0] + ",0)");
+        ctx.fillStyle = g1;
+        ctx.fillRect(-bandLen / 2, -bandW / 2, bandLen, bandW);
+        var g2 = ctx.createLinearGradient(0, -coreW / 2, 0, coreW / 2);
+        g2.addColorStop(0, "rgba(" + palette[1] + ",0)");
+        g2.addColorStop(0.5, "rgba(" + palette[1] + "," + (themeDark ? 0.05 : 0.03) + ")");
+        g2.addColorStop(1, "rgba(" + palette[1] + ",0)");
+        ctx.fillStyle = g2;
+        ctx.fillRect(-bandLen / 2, -coreW / 2, bandLen, coreW);
+        ctx.restore();
+      }
+
+      /* —— 引力波处理 ①：计算每颗微粒的震荡位移 ——
+         波前以固定速度外扩，微粒位移 = 高斯包络 × 阻尼正弦振荡，
+         方向沿点击处向外的径向——波前经过时微粒被推出去再振荡弹回 */
+      var gi, age;
+      if (gwaves.length) {
+        for (i = 0; i < dots.length; i++) {
+          dots[i].ox = 0;
+          dots[i].oy = 0;
+        }
+        for (gi = gwaves.length - 1; gi >= 0; gi--) {
+          var gw = gwaves[gi];
+          age = t - gw.born;
+          if (age > 1600) {
+            gwaves.splice(gi, 1);
+            continue;
+          }
+          var wavefront = age * 0.5; // 波前半径（px）
+          var damp = Math.exp(-age / 550); // 时间衰减
+          var osc = Math.sin(age * 0.028); // 振荡相位（先推后吸）
+          for (var di = 0; di < dots.length; di++) {
+            var d = dots[di];
+            var ddx = d.x * W - gw.x;
+            var ddy = d.y * H - gw.y;
+            var dist = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+            var gap = dist - wavefront;
+            var env = Math.exp(-(gap * gap) / 6050); // 波前附近 σ≈55px 的高斯包络
+            if (env < 0.01) continue;
+            var push = 9 * env * damp * osc;
+            d.ox += (ddx / dist) * push;
+            d.oy += (ddy / dist) * push;
+          }
+        }
+      }
+
+      // 远星场微粒：漂移 + 闪烁 + 引力波位移；亮度刻意压低保证文字可读
       dots.forEach(function (d) {
-        d.x = (d.x + d.vx * dt + 1) % 1;
-        d.y = (d.y + d.vy * dt + 1) % 1;
+        if (d.river) {
+          // 星河微粒：推进带轴坐标（流动），流出一端后在屏幕外卷回
+          d.a += d.va * dt;
+          if (d.a > d.len / 2) d.a = -d.len / 2;
+          var bend = Math.sin((d.a / d.len) * Math.PI * 2) * d.halfW * riverBend; // 带体微弯
+          var bb = d.b + bend;
+          var cosA = Math.cos(riverAngle);
+          var sinA = Math.sin(riverAngle);
+          d.x = (W / 2 + cosA * d.a - sinA * bb) / W;
+          d.y = (H / 2 + sinA * d.a + cosA * bb) / H;
+        } else {
+          d.x = (d.x + d.vx * dt + 1) % 1;
+          d.y = (d.y + d.vy * dt + 1) % 1;
+        }
+        var twinkle = 0.7 + 0.3 * Math.sin(t * d.tw + d.ph);
+        var alpha = d.base * twinkle * (themeDark ? 0.34 : 0.18);
+        if (d.tint >= 0) {
+          ctx.fillStyle = "rgba(" + palette[d.tint] + "," + alpha.toFixed(3) + ")";
+        } else {
+          ctx.fillStyle = themeDark
+            ? "rgba(226,232,240," + alpha.toFixed(3) + ")"
+            : "rgba(30,41,59," + alpha.toFixed(3) + ")";
+        }
         ctx.beginPath();
-        ctx.arc(d.x * W, d.y * H, d.r, 0, Math.PI * 2);
+        ctx.arc(d.x * W + d.ox, d.y * H + d.oy, d.r, 0, Math.PI * 2);
         ctx.fill();
       });
 
@@ -242,6 +365,26 @@
           "rgba(" + ring.color + "," + (0.35 * k * (themeDark ? 1 : 0.7)).toFixed(3) + ")";
         ctx.lineWidth = ring.width;
         ctx.stroke();
+      }
+
+      /* —— 引力波处理 ②：三圈「呼吸」振荡环 ——
+         环半径带阻尼正弦调制，看上去像时空本身在抖 */
+      for (gi = 0; gi < gwaves.length; gi++) {
+        var gw2 = gwaves[gi];
+        var age2 = t - gw2.born;
+        var wf2 = age2 * 0.5;
+        var dp2 = Math.exp(-age2 / 550);
+        var oc2 = Math.sin(age2 * 0.028);
+        for (var gr = 0; gr < 3; gr++) {
+          var rr = wf2 - gr * 26 + oc2 * dp2 * 7; // 主环 + 两圈伴环，半径随振荡呼吸
+          if (rr <= 0) continue;
+          ctx.beginPath();
+          ctx.arc(gw2.x, gw2.y, rr, 0, Math.PI * 2);
+          ctx.strokeStyle =
+            "rgba(" + palette[1] + "," + (0.3 * dp2 * (1 - gr * 0.25)).toFixed(3) + ")";
+          ctx.lineWidth = 1.6 + dp2 * 1.4;
+          ctx.stroke();
+        }
       }
 
       requestAnimationFrame(frame);
@@ -292,6 +435,7 @@
     var core = []; // 核心星团：小而亮，向银心聚集
     var halo = []; // 晕层：大而淡的 bokeh 光斑，烘出景深氛围
     var dust = []; // 尘埃带：沿旋臂内侧分布的暗色吸光云（真实星系的尘埃道）
+    var veil = []; // 盘面薄纱：极细极淡的微粒，填出星系「连续星光」的底子
     var fgStars = []; // 前景亮星：带十字星芒，屏幕空间固定，不随星系转
     var bgGalaxies = []; // 远景星系：淡淡的椭圆光斑，增加纵深
 
@@ -395,6 +539,20 @@
       return 0;
     }
 
+    // 薄纱微粒配色：跟随半径渐变，但更素（大量淡白/浅蓝，少量暖白）
+    function pickVeilColor(vr) {
+      var v = Math.random();
+      if (vr < 0.42) {
+        if (v < 0.3) return 6; // 暖白
+        if (v < 0.55) return 0;
+        return 1;
+      }
+      if (v < 0.35) return 0;
+      if (v < 0.6) return 2;
+      if (v < 0.85) return 1;
+      return 4;
+    }
+
     // 按视口面积撒星，小屏自动变少
     function seed() {
       stars = [];
@@ -420,6 +578,7 @@
       core = [];
       halo = [];
       dust = [];
+      veil = [];
       fgStars = [];
       bgGalaxies = [];
       var area = W * H;
@@ -492,6 +651,26 @@
           alpha: 0.035 + Math.random() * 0.085,
           color: Math.floor(Math.random() * 5),
           tw: 0.0003 + Math.random() * 0.0006,
+          ph: Math.random() * Math.PI * 2,
+        });
+      }
+
+      // 盘面薄纱：大量极细极淡的微粒填出「连续星光」的底子
+      //（真实星系的盘面是平滑的恒星光，不只是离散的亮星）
+      var veilCount = Math.min(900, Math.round(area / 1400));
+      for (i = 0; i < veilCount; i++) {
+        var vr = 0.24 + 0.76 * Math.pow(Math.random(), 1.35);
+        var vInArm = Math.random() < 0.6;
+        veil.push({
+          r: vr,
+          a: vInArm
+            ? (i % 2) * Math.PI + vr * 2.6 + gauss3() * (0.3 + vr * 0.4)
+            : Math.random() * Math.PI * 2,
+          y: gauss3() * 0.03,
+          size: 0.8 + Math.random() * 1.2,
+          alpha: 0.05 + Math.random() * 0.11,
+          color: pickVeilColor(vr),
+          tw: 0.0003 + Math.random() * 0.0007,
           ph: Math.random() * Math.PI * 2,
         });
       }
@@ -579,6 +758,7 @@
 
       ctx.globalCompositeOperation = "lighter";
       drawGalaxySet(halo, spin, proj);
+      drawGalaxySet(veil, spin, proj); // 连续星光薄纱垫在亮星下面
       drawGalaxySet(disk, spin, proj);
 
       // 尘埃带：切回普通模式，暗色软斑叠在亮臂上「吸光」，
